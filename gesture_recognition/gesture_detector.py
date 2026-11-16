@@ -7,7 +7,7 @@ class GestureDetector:
     def __init__(self):
 
         # Normalized distance thresholds for two-finger control
-        self.CLOSE_THRESHOLD = 0.28
+        self.CLOSE_THRESHOLD = 0.35
         self.FAR_THRESHOLD = 0.55
 
         print("Gesture recognition engine initialized!")
