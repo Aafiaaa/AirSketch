@@ -12,6 +12,7 @@ from drawing.drawing_tools import COLORS, DEFAULT_COLOR
 
 
 class GestureStabilizer:
+
     def __init__(self, window_size=5, required_votes=3):
         self.history = deque(maxlen=window_size)
         self.required_votes = required_votes
@@ -37,6 +38,7 @@ class GestureStabilizer:
 
 
 def main():
+
     camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
     if not camera.isOpened():
@@ -49,6 +51,7 @@ def main():
     hand_detector = None
 
     try:
+
         hand_detector = HandDetector(max_hands=1)
         gesture_detector = GestureDetector()
 
@@ -84,22 +87,24 @@ def main():
         COLOR_CHANGE_DELAY = 0.8
 
         print("\n================================")
-        print("       MOTION SENSE")
+        print("          AIRSKETCH")
         print("       VIRTUAL CANVAS")
         print("================================")
-        print("POINTING    : Draw")
-        print("THUMBS UP   : Increase brush size")
-        print("THUMBS DOWN : Decrease brush size")
-        print("OPEN PALM   : Change colour")
-        print("FIST        : Stop drawing")
-        print("E           : Toggle eraser")
-        print("C           : Clear canvas")
-        print("S           : Save artwork")
-        print("1-9         : Select colour")
-        print("Q           : Exit")
+        print("POINTING       : Draw")
+        print("FIST           : Stop drawing")
+        print("OPEN PALM      : Change colour")
+        print("TWO FINGERS CLOSE : Increase brush")
+        print("TWO FINGERS FAR   : Decrease brush")
+        print("TWO FINGERS MID   : No size change")
+        print("E              : Toggle eraser")
+        print("C              : Clear canvas")
+        print("S              : Save artwork")
+        print("1-9            : Select colour")
+        print("Q              : Exit")
         print("================================\n")
 
         while True:
+
             success, frame = camera.read()
 
             if not success:
@@ -119,16 +124,21 @@ def main():
             raw_gesture = "NO HAND"
 
             if hand_count > 0:
+
                 landmarks = result.hand_landmarks[0]
 
                 # Gesture recognition
-                raw_gesture = gesture_detector.detect_gesture(landmarks)
+                raw_gesture = gesture_detector.detect_gesture(
+                    landmarks
+                )
+
                 gesture = gesture_stabilizer.update(raw_gesture)
 
                 now = time.monotonic()
 
                 # Index fingertip position
                 index_tip = landmarks[8]
+
                 x = int(index_tip.x * width)
                 y = int(index_tip.y * height)
 
@@ -148,12 +158,14 @@ def main():
                         raw_gesture == "POINTING"
                         or (
                             raw_gesture == "UNKNOWN"
-                            and now - last_raw_pointing_time <= DRAW_GRACE_PERIOD
+                            and now - last_raw_pointing_time
+                            <= DRAW_GRACE_PERIOD
                         )
                     )
                 )
 
                 if should_draw:
+
                     smooth_point = brush.smooth_position((x, y))
                     canvas.draw(smooth_point)
 
@@ -166,71 +178,133 @@ def main():
                     )
 
                 # ==================================
-                # GESTURE 2: THUMBS UP - INCREASE
+                # GESTURE 2: TWO FINGERS CLOSE
+                # INCREASE BRUSH SIZE
                 # ==================================
 
                 elif (
-                    raw_gesture == "THUMBS_UP"
-                    and gesture == "THUMBS_UP"
+                    raw_gesture == "SIZE_INCREASE"
+                    and gesture == "SIZE_INCREASE"
                 ):
+
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if now - last_brush_adjustment >= BRUSH_ADJUST_INTERVAL:
-                        new_size = min(BRUSH_MAX, brush.size + BRUSH_STEP)
+                    if (
+                        now - last_brush_adjustment
+                        >= BRUSH_ADJUST_INTERVAL
+                    ):
+
+                        new_size = min(
+                            BRUSH_MAX,
+                            brush.size + BRUSH_STEP
+                        )
+
                         brush.update_size(new_size)
                         canvas.set_brush_size(brush.size)
+
                         last_brush_adjustment = now
 
                 # ==================================
-                # GESTURE 3: THUMBS DOWN - DECREASE
+                # GESTURE 3: TWO FINGERS FAR APART
+                # DECREASE BRUSH SIZE
                 # ==================================
 
                 elif (
-                    raw_gesture == "THUMBS_DOWN"
-                    and gesture == "THUMBS_DOWN"
+                    raw_gesture == "SIZE_DECREASE"
+                    and gesture == "SIZE_DECREASE"
                 ):
+
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if now - last_brush_adjustment >= BRUSH_ADJUST_INTERVAL:
-                        new_size = max(BRUSH_MIN, brush.size - BRUSH_STEP)
+                    if (
+                        now - last_brush_adjustment
+                        >= BRUSH_ADJUST_INTERVAL
+                    ):
+
+                        new_size = max(
+                            BRUSH_MIN,
+                            brush.size - BRUSH_STEP
+                        )
+
                         brush.update_size(new_size)
                         canvas.set_brush_size(brush.size)
+
                         last_brush_adjustment = now
 
                 # ==================================
-                # GESTURE 4: OPEN PALM - CHANGE COLOR
+                # GESTURE 4: TWO FINGERS NEUTRAL
+                # NO SIZE CHANGE
                 # ==================================
 
-                elif gesture == "OPEN PALM" and raw_gesture == "OPEN PALM":
+                elif (
+                    raw_gesture == "SIZE_NEUTRAL"
+                    or gesture == "SIZE_NEUTRAL"
+                ):
+
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if now - last_color_change >= COLOR_CHANGE_DELAY:
-                        color_index = (color_index + 1) % len(color_names)
+                # ==================================
+                # GESTURE 5: OPEN PALM - CHANGE COLOR
+                # ==================================
+
+                elif (
+                    gesture == "OPEN PALM"
+                    and raw_gesture == "OPEN PALM"
+                ):
+
+                    brush.reset_position()
+                    canvas.stop_drawing()
+
+                    if (
+                        now - last_color_change
+                        >= COLOR_CHANGE_DELAY
+                    ):
+
+                        color_index = (
+                            color_index + 1
+                        ) % len(color_names)
+
                         current_color = color_names[color_index]
-                        canvas.set_color(COLORS[current_color])
+
+                        canvas.set_color(
+                            COLORS[current_color]
+                        )
+
                         last_color_change = now
 
                 # ==================================
-                # GESTURE 5: FIST - STOP DRAWING
+                # GESTURE 6: FIST - STOP DRAWING
                 # ==================================
 
-                elif raw_gesture == "FIST" or gesture == "FIST":
+                elif (
+                    raw_gesture == "FIST"
+                    or gesture == "FIST"
+                ):
+
                     brush.reset_position()
                     canvas.stop_drawing()
 
+                # ==================================
                 # UNKNOWN / TRANSITION
+                # ==================================
+
                 else:
+
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                frame = hand_detector.draw_landmarks(frame, result)
+                frame = hand_detector.draw_landmarks(
+                    frame, result
+                )
 
             else:
+
                 gesture_stabilizer.reset()
                 last_raw_pointing_time = 0.0
+
                 brush.reset_position()
                 canvas.stop_drawing()
 
@@ -265,7 +339,7 @@ def main():
 
             cv2.putText(
                 display,
-                "MOTION SENSE",
+                "AIRSKETCH",
                 (25, 40),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.9,
@@ -334,7 +408,7 @@ def main():
             )
 
             cv2.imshow(
-                "Motion Sense - Virtual Canvas",
+                "AirSketch - Virtual Canvas",
                 display
             )
 
@@ -348,30 +422,42 @@ def main():
                 break
 
             elif key == ord('c'):
+
                 canvas.clear()
                 brush.reset_position()
                 canvas.stop_drawing()
 
             elif key == ord('s'):
+
                 canvas.save()
 
             elif key == ord('e'):
+
                 canvas.toggle_eraser()
 
-            elif key in [ord(str(i)) for i in range(1, 10)]:
+            elif key in [
+                ord(str(i)) for i in range(1, 10)
+            ]:
+
                 selected_index = key - ord('1')
 
                 if selected_index < len(color_names):
+
                     color_index = selected_index
                     current_color = color_names[color_index]
-                    canvas.set_color(COLORS[current_color])
 
-        print("Motion Sense session ended.")
+                    canvas.set_color(
+                        COLORS[current_color]
+                    )
+
+        print("AirSketch session ended.")
 
     except Exception as error:
+
         print("Drawing application error:", error)
 
     finally:
+
         camera.release()
 
         if hand_detector is not None:
