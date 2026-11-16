@@ -71,9 +71,9 @@ def main():
 
         previous_time = 0.0
 
-        # Drawing grace period
+        # Drawing continuity settings
         last_raw_pointing_time = 0.0
-        DRAW_GRACE_PERIOD = 0.12
+        DRAW_GRACE_PERIOD = 0.15
 
         # Brush size controls
         BRUSH_MIN = 3
@@ -90,17 +90,17 @@ def main():
         print("          AIRSKETCH")
         print("       VIRTUAL CANVAS")
         print("================================")
-        print("POINTING       : Draw")
-        print("FIST           : Stop drawing")
-        print("OPEN PALM      : Change colour")
+        print("POINTING          : Draw")
+        print("FIST              : Stop drawing")
+        print("OPEN PALM         : Change colour")
         print("TWO FINGERS CLOSE : Increase brush")
         print("TWO FINGERS FAR   : Decrease brush")
         print("TWO FINGERS MID   : No size change")
-        print("E              : Toggle eraser")
-        print("C              : Clear canvas")
-        print("S              : Save artwork")
-        print("1-9            : Select colour")
-        print("Q              : Exit")
+        print("E                 : Toggle eraser")
+        print("C                 : Clear canvas")
+        print("S                 : Save artwork")
+        print("1-9               : Select colour")
+        print("Q                 : Exit")
         print("================================\n")
 
         while True:
@@ -123,6 +123,8 @@ def main():
             gesture = "NO HAND"
             raw_gesture = "NO HAND"
 
+            now = time.monotonic()
+
             if hand_count > 0:
 
                 landmarks = result.hand_landmarks[0]
@@ -133,8 +135,6 @@ def main():
                 )
 
                 gesture = gesture_stabilizer.update(raw_gesture)
-
-                now = time.monotonic()
 
                 # Index fingertip position
                 index_tip = landmarks[8]
@@ -293,8 +293,21 @@ def main():
 
                 else:
 
-                    brush.reset_position()
-                    canvas.stop_drawing()
+                    # Preserve drawing position during
+                    # brief gesture classification flickers.
+                    if not (
+                        raw_gesture == "UNKNOWN"
+                        and gesture == "POINTING"
+                        and now - last_raw_pointing_time
+                        <= DRAW_GRACE_PERIOD
+                    ):
+
+                        brush.reset_position()
+                        canvas.stop_drawing()
+
+                # ==================================
+                # DRAW HAND SKELETON AND LANDMARKS
+                # ==================================
 
                 frame = hand_detector.draw_landmarks(
                     frame, result
@@ -302,11 +315,17 @@ def main():
 
             else:
 
-                gesture_stabilizer.reset()
-                last_raw_pointing_time = 0.0
+                # Allow brief hand-tracking interruptions.
+                if (
+                    now - last_raw_pointing_time
+                    > DRAW_GRACE_PERIOD
+                ):
 
-                brush.reset_position()
-                canvas.stop_drawing()
+                    gesture_stabilizer.reset()
+                    last_raw_pointing_time = 0.0
+
+                    brush.reset_position()
+                    canvas.stop_drawing()
 
             # ==================================
             # DISPLAY DRAWING CANVAS
