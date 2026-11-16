@@ -10,6 +10,8 @@ from drawing.canvas import DrawingCanvas
 from drawing.brush import Brush
 from drawing.drawing_tools import COLORS, DEFAULT_COLOR
 
+from particles.effects import ParticleEffects
+
 
 class GestureStabilizer:
 
@@ -63,6 +65,12 @@ def main():
         canvas = DrawingCanvas(1280, 720)
         brush = Brush(smoothing=0.40)
 
+        # Particle system
+        particle_effects = ParticleEffects()
+
+        # Drawing mode
+        drawing_mode = "NORMAL"
+
         current_color = DEFAULT_COLOR
         canvas.set_color(COLORS[current_color])
 
@@ -71,7 +79,7 @@ def main():
 
         previous_time = 0.0
 
-        # Drawing continuity settings
+        # Drawing continuity
         last_raw_pointing_time = 0.0
         DRAW_GRACE_PERIOD = 0.15
 
@@ -82,7 +90,7 @@ def main():
         BRUSH_ADJUST_INTERVAL = 0.30
         last_brush_adjustment = 0.0
 
-        # Colour switching delay
+        # Colour switching
         last_color_change = 0.0
         COLOR_CHANGE_DELAY = 0.8
 
@@ -96,8 +104,10 @@ def main():
         print("TWO FINGERS CLOSE : Increase brush")
         print("TWO FINGERS FAR   : Decrease brush")
         print("TWO FINGERS MID   : No size change")
+        print("M                 : Switch drawing mode")
+        print("V                 : Change particle style")
         print("E                 : Toggle eraser")
-        print("C                 : Clear canvas")
+        print("C                 : Clear")
         print("S                 : Save artwork")
         print("1-9               : Select colour")
         print("Q                 : Exit")
@@ -129,14 +139,12 @@ def main():
 
                 landmarks = result.hand_landmarks[0]
 
-                # Gesture recognition
                 raw_gesture = gesture_detector.detect_gesture(
                     landmarks
                 )
 
                 gesture = gesture_stabilizer.update(raw_gesture)
 
-                # Index fingertip position
                 index_tip = landmarks[8]
 
                 x = int(index_tip.x * width)
@@ -145,9 +153,7 @@ def main():
                 x = max(0, min(width - 1, x))
                 y = max(0, min(height - 1, y))
 
-                # ==================================
-                # GESTURE 1: POINTING - DRAW
-                # ==================================
+                # POINTING - DRAW
 
                 if raw_gesture == "POINTING":
                     last_raw_pointing_time = now
@@ -167,7 +173,18 @@ def main():
                 if should_draw:
 
                     smooth_point = brush.smooth_position((x, y))
-                    canvas.draw(smooth_point)
+
+                    if drawing_mode == "NORMAL":
+
+                        canvas.draw(smooth_point)
+
+                    else:
+
+                        particle_effects.draw_trail(
+                            smooth_point,
+                            COLORS[current_color],
+                            brush.size
+                        )
 
                     cv2.circle(
                         frame,
@@ -177,10 +194,7 @@ def main():
                         -1
                     )
 
-                # ==================================
-                # GESTURE 2: TWO FINGERS CLOSE
                 # INCREASE BRUSH SIZE
-                # ==================================
 
                 elif (
                     raw_gesture == "SIZE_INCREASE"
@@ -190,10 +204,7 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if (
-                        now - last_brush_adjustment
-                        >= BRUSH_ADJUST_INTERVAL
-                    ):
+                    if now - last_brush_adjustment >= BRUSH_ADJUST_INTERVAL:
 
                         new_size = min(
                             BRUSH_MAX,
@@ -205,10 +216,7 @@ def main():
 
                         last_brush_adjustment = now
 
-                # ==================================
-                # GESTURE 3: TWO FINGERS FAR APART
                 # DECREASE BRUSH SIZE
-                # ==================================
 
                 elif (
                     raw_gesture == "SIZE_DECREASE"
@@ -218,10 +226,7 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if (
-                        now - last_brush_adjustment
-                        >= BRUSH_ADJUST_INTERVAL
-                    ):
+                    if now - last_brush_adjustment >= BRUSH_ADJUST_INTERVAL:
 
                         new_size = max(
                             BRUSH_MIN,
@@ -233,10 +238,7 @@ def main():
 
                         last_brush_adjustment = now
 
-                # ==================================
-                # GESTURE 4: TWO FINGERS NEUTRAL
-                # NO SIZE CHANGE
-                # ==================================
+                # NEUTRAL SIZE GESTURE
 
                 elif (
                     raw_gesture == "SIZE_NEUTRAL"
@@ -246,9 +248,7 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                # ==================================
-                # GESTURE 5: OPEN PALM - CHANGE COLOR
-                # ==================================
+                # OPEN PALM - CHANGE COLOUR
 
                 elif (
                     gesture == "OPEN PALM"
@@ -258,10 +258,7 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                    if (
-                        now - last_color_change
-                        >= COLOR_CHANGE_DELAY
-                    ):
+                    if now - last_color_change >= COLOR_CHANGE_DELAY:
 
                         color_index = (
                             color_index + 1
@@ -269,15 +266,17 @@ def main():
 
                         current_color = color_names[color_index]
 
-                        canvas.set_color(
+                        canvas.set_color(COLORS[current_color])
+
+                        # Particle burst at the hand position
+                        particle_effects.color_burst(
+                            (x, y),
                             COLORS[current_color]
                         )
 
                         last_color_change = now
 
-                # ==================================
-                # GESTURE 6: FIST - STOP DRAWING
-                # ==================================
+                # FIST - STOP DRAWING
 
                 elif (
                     raw_gesture == "FIST"
@@ -287,14 +286,10 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-                # ==================================
                 # UNKNOWN / TRANSITION
-                # ==================================
 
                 else:
 
-                    # Preserve drawing position during
-                    # brief gesture classification flickers.
                     if not (
                         raw_gesture == "UNKNOWN"
                         and gesture == "POINTING"
@@ -305,21 +300,14 @@ def main():
                         brush.reset_position()
                         canvas.stop_drawing()
 
-                # ==================================
-                # DRAW HAND SKELETON AND LANDMARKS
-                # ==================================
-
+                # Draw hand skeleton
                 frame = hand_detector.draw_landmarks(
                     frame, result
                 )
 
             else:
 
-                # Allow brief hand-tracking interruptions.
-                if (
-                    now - last_raw_pointing_time
-                    > DRAW_GRACE_PERIOD
-                ):
+                if now - last_raw_pointing_time > DRAW_GRACE_PERIOD:
 
                     gesture_stabilizer.reset()
                     last_raw_pointing_time = 0.0
@@ -327,9 +315,7 @@ def main():
                     brush.reset_position()
                     canvas.stop_drawing()
 
-            # ==================================
-            # DISPLAY DRAWING CANVAS
-            # ==================================
+            # NORMAL DRAWING CANVAS
 
             drawing_layer = canvas.get_canvas()
 
@@ -341,7 +327,15 @@ def main():
                 0
             )
 
+            # PARTICLE RENDERING
+            # Existing particles continue fading even when drawing stops.
+
+            if drawing_mode == "PARTICLE":
+
+                display = particle_effects.update_and_render(display)
+
             # FPS
+
             current_time = time.monotonic()
 
             fps = (
@@ -352,9 +346,7 @@ def main():
 
             previous_time = current_time
 
-            # ==================================
-            # DISPLAY INFORMATION
-            # ==================================
+            # HUD
 
             cv2.putText(
                 display,
@@ -408,8 +400,30 @@ def main():
 
             cv2.putText(
                 display,
-                f"FPS: {fps:.1f}",
+                f"MODE: {drawing_mode}",
                 (25, 220),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 255),
+                2
+            )
+
+            if drawing_mode == "PARTICLE":
+
+                cv2.putText(
+                    display,
+                    f"PARTICLE STYLE: {particle_effects.style}",
+                    (25, 255),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65,
+                    (255, 200, 100),
+                    2
+                )
+
+            cv2.putText(
+                display,
+                f"FPS: {fps:.1f}",
+                (25, 290),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (0, 255, 0),
@@ -418,7 +432,17 @@ def main():
 
             cv2.putText(
                 display,
-                "Q: Exit | C: Clear | S: Save | E: Eraser",
+                "M: Mode | V: Particle Style | Q: Exit",
+                (25, height - 55),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (255, 255, 255),
+                1
+            )
+
+            cv2.putText(
+                display,
+                "C: Clear | S: Save | E: Eraser | 1-9: Colour",
                 (25, height - 25),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
@@ -431,32 +455,63 @@ def main():
                 display
             )
 
-            # ==================================
             # KEYBOARD CONTROLS
-            # ==================================
 
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord('q'):
                 break
 
+            # SWITCH NORMAL / PARTICLE MODE
+
+            elif key == ord('m'):
+
+                if drawing_mode == "NORMAL":
+                    drawing_mode = "PARTICLE"
+                else:
+                    drawing_mode = "NORMAL"
+
+                brush.reset_position()
+                canvas.stop_drawing()
+
+                print("Drawing mode:", drawing_mode)
+
+            # CHANGE PARTICLE STYLE
+
+            elif key == ord('v'):
+
+                particle_effects.change_style()
+
+                print(
+                    "Particle style:",
+                    particle_effects.style
+                )
+
+            # CLEAR CANVAS AND PARTICLES
+
             elif key == ord('c'):
 
                 canvas.clear()
+                particle_effects.clear()
+
                 brush.reset_position()
                 canvas.stop_drawing()
+
+            # SAVE CANVAS
 
             elif key == ord('s'):
 
                 canvas.save()
 
+            # TOGGLE ERASER
+
             elif key == ord('e'):
 
                 canvas.toggle_eraser()
 
-            elif key in [
-                ord(str(i)) for i in range(1, 10)
-            ]:
+            # SELECT COLOUR
+
+            elif key in [ord(str(i)) for i in range(1, 10)]:
 
                 selected_index = key - ord('1')
 
@@ -465,7 +520,10 @@ def main():
                     color_index = selected_index
                     current_color = color_names[color_index]
 
-                    canvas.set_color(
+                    canvas.set_color(COLORS[current_color])
+
+                    particle_effects.color_burst(
+                        (width // 2, height // 2),
                         COLORS[current_color]
                     )
 
