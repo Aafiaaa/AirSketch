@@ -238,16 +238,7 @@ class ParticleEngine:
             sigmaY=2.5
         )
 
-        # Add a subtle transparent black tint.
-        black_overlay = np.zeros_like(frame)
-
-        display = cv2.addWeighted(
-            frame,
-            0.58,
-            black_overlay,
-            0.42,
-            0
-        )
+        display = frame.copy()
 
         # Add particle glow.
         display = cv2.addWeighted(
